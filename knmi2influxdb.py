@@ -11,9 +11,9 @@ import csv
 import argparse
 import datetime
 
-DEFAULTQUERY='test,src=outside_knmi{STN} wind={DD},windspeed={FF:.1f},temp={T:.1f},irrad={Q:.2f},rain={RH:.1f} {DATETIME}'
-DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
-#DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}'
+#DEFAULTQUERY='test,src=outside_knmi{STN} wind={DD},windspeed={FF:.1f},temp={T:.1f},irrad={Q:.2f},rain={RH:.1f} {DATETIME}'
+#DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
+DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}'
 KNMISTATION=260 # KNMI station for getting live data. See http://projects.knmi.nl/klimatologie/uurgegevens/
 
 # Required for graceful None formatting, sometimes KNMI data has null entries, 
@@ -50,7 +50,7 @@ def get_knmi_data(knmisource, knmistation=KNMISTATION):
 		start = datetime.datetime.now() - datetime.timedelta(days=21)
 		
 		knmiuri = 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi'
-		knmiquery = "start=2018010101&vars=ALL&stns={}".format(start.strftime("%Y%m%d"), knmistation)
+		knmiquery = "start={}01&vars=ALL&stns={}".format(start.strftime("%Y%m%d"), knmistation)
 
 		# Query can take quite long, set long-ish timeout
 		r = requests.post(knmiuri, data=knmiquery, timeout=30)
@@ -159,7 +159,7 @@ def influxdb_output(outuri, influxdata):
 
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description="Convert KNMI data to influxdb line protocol. Optionally insert into database directly")
-parser.add_argument("knmisource", help="KNMI hourly data source. Can be path or 'KNMI' to get live data.")
+parser.add_argument("knmisource", help="KNMI hourly data source. Can be path or 'KNMI' to get live data from http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi.")
 parser.add_argument("outuri", help="Output target, either influxdb server (if starts with http, e.g. http://localhost:8086/write?db=smarthome&precision=s), or filename (else)")
 parser.add_argument("--query", help="Query template for influxdb line protocol, where {DATETIME}=UT date in seconds since epoch, {STN}=station, {T}=temp in C, {FF}=windspeed in m/s, {DD}=wind direction in deg, {Q}=irradiance in W/m^2, {RH}=precipitation in mm, {NEWLINE} is newline, e.g. 'weather,device=knmi temp={T} wind={DD}'", default=DEFAULTQUERY)
 args = parser.parse_args()
