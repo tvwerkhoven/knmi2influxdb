@@ -32,11 +32,9 @@ Use curl to post datafile
 
 # Get one time fix
 
-BEG=20190101
-END=20190610
+BEG=20180101
+END=20190911
 curl 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi' -d "start=${BEG}01&end=${END}24&vars=ALL&stns=260" -o /tmp/knmidata-query.csv
-python3 knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-influxformat.csv --query "temperaturev2 outside_knmi{STN}={T:.1f} {date}"
+python3 knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-influxformat.csv --query 'temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
 curl -i -XPOST "http://localhost:8086/write?db=smarthome&precision=s" --data-binary @/tmp/knmidata-influxformat.csv
 
-python3 knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-weather-influxformat.csv --query "weatherv2 rain_duration_knmi{STN}={DR:.1f}, rain_qty_knmi{STN}={RH:.1f}, wind_speed_knmi{STN}={FF:.1f}, wind_gust_knmi{STN}={FX:.1f}, wind_dir_knmi{STN}={DD} {date}"
-curl -i -XPOST "http://localhost:8086/write?db=smarthome&precision=s" --data-binary @/tmp/knmidata-weather-influxformat.csv
