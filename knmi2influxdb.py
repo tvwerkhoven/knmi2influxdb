@@ -130,12 +130,16 @@ def convert_knmi(knmidata, query):
 			outline = fmt.format(query, **fieldval)
 			# Influxdb does not recognize None or null as values, instead 
 			# remove fields by filtering out all ~~ values.
-			# First get field sets by splitting by space into three parts (https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/)
-			outline_meas, outline_field, outline_time = outline.split(' ')
-			# Replace None values
-			outline_field = ','.join([w for w in outline_field.split(',') if not '~~' in w])
+			outline_fix = []
+			for l in outline.split('\n'):
+				# First get field sets by splitting by space into three parts (https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/)
+				outline_meas, outline_field, outline_time = l.split(' ')
+				# Replace None values
+				outline_field = ','.join([w for w in outline_field.split(',') if not '~~' in w])
+				outline_fix.append(" ".join([outline_meas, outline_field, outline_time]))
+
 			# Store
-			parsed_lines.append(" ".join([outline_meas, outline_field, outline_time]))
+			parsed_lines.append("\n".join(outline_fix))
 
 		# If we found nothing (during initialization), we continue to next 
 		# line (added for clarity)
