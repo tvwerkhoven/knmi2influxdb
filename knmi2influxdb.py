@@ -152,7 +152,7 @@ def convert_knmi(knmidata, query):
 
 def influxdb_output(outuri, influxdata):
 	if (outuri[:4].lower() == 'http'):
-		r = requests.post(outuri, data="\n".join(influxdata), timeout=5)
+		r = requests.post(outuri, data="\n".join(influxdata), timeout=10)
 	else:
 		# Store to file
 		with open(outuri, 'w+') as fdo:
