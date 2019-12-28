@@ -46,7 +46,7 @@ class PartialFormatter(string.Formatter):
 def get_knmi_data(knmisource, knmistation=KNMISTATION):
 	# If source is KNMI, get live data
 	if (knmisource == 'KNMI'):
-		# Get data from last 5 days by default
+		# Get data from last 21 days by default
 		start = datetime.datetime.now() - datetime.timedelta(days=21)
 		
 		knmiuri = 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi'
@@ -66,7 +66,7 @@ def convert_knmi(knmidata, query):
 	fieldpos = {}
 	fieldval = {'NEWLINE':"\n"}
 	fieldfunc = {
-		'YYYYMMDD': lambda x: datetime.datetime(int(x[0:4]), int(x[4:6]), int(x[6:8]), tzinfo=datetime.timezone.utc),
+		'YYYYMMDD': lambda x: datetime.datetime(int(x[0:4]), int(x[4:6]), int(x[6:8]), tzinfo=datetime.timezone.utc), ## time
 		'HH': lambda x: int(x),
 		'DD': lambda x: int(x),
 		'FF': lambda x: int(x)/10,
@@ -75,7 +75,8 @@ def convert_knmi(knmidata, query):
 		'SQ': lambda x: int(x)/10,
 		'Q':  lambda x: int(x)*10000/3600, # Convert J/cm^2/hour to W/m^2, i.e. 10000cm^2/m^2 and 1/3600 hr/sec 
 		'DR': lambda x: int(x)/10,
-		'RH': lambda x: max(int(x),0)/10 # RH is values? From their doc: RH       = Uursom van de neerslag (in 0.1 mm) (-1 voor <0.05 mm); 
+		'RH': lambda x: max(int(x),0)/10, # RH is values? From their doc: RH       = Uursom van de neerslag (in 0.1 mm) (-1 voor <0.05 mm); 
+		'P':  lambda x: int(x)/10,
 	}
 	parsed_lines = []
 	fmt=PartialFormatter()
@@ -98,6 +99,7 @@ def convert_knmi(knmidata, query):
 				fieldpos['Q'] = row.index("Q")
 				fieldpos['DR'] = row.index("DR")
 				fieldpos['RH'] = row.index("RH")
+				fieldpos['P'] = row.index("P")
 			except ValueError as e:
 				quit("KNMI data file incompatible, could not find fields HH, DD or others: {}".format(e))
 			start = True
