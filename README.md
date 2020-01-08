@@ -17,6 +17,7 @@ Better than scraping websites ;)
 
 Script can get data in two methods:
 1. Live from KNMI
+2. From file (disabled now)
 
 ## Output data
 
@@ -50,7 +51,7 @@ or manually from
 
 ## Convert to influx line format
 
-Use knmi2influxdb.py, e.g.
+Use knmi2influxdb.py, e.g. (does not work at the moment)
 
     python3 knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-influxformat.csv --query "temperature outside_knmi{STN}={T:.1f} {date}"
 
