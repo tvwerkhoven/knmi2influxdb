@@ -182,7 +182,7 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 	fieldval = {'NEWLINE':"\n"}
 	# time units is: seconds since 1950-01-01 00:00:00
 	fieldval['DATETIME'] = netCDF4.num2date(rootgrp["/time"][:], rootgrp["/time"].units)[0]
-	fieldval['STN'] = rootgrp["/stationname"][stationid]
+	fieldval['STN'] = stationid
 	fieldval['T'] = rootgrp["/ta"][stationid][0]
 	fieldval['FF'] = rootgrp["/ff"][stationid][0]
 	fieldval['FX'] = rootgrp["/gff"][stationid][0]
