@@ -1,22 +1,22 @@
 # knmi-temp-pusher
 
-Get KNMI temp daily, add to influxdb database
+Better than scraping websites ;)
+
+1. Get KNMI historical weather data daily, add to influxdb database
+2. Get real-time KNMI weather hourly, add to influxdb database.
 
 # Usage
 
-    knmi2influxdb.py KNMI "http://localhost:8086/write?db=smarthome&precision=s" --query "temperature outside_knmi{STN}={T:.1f} {DATETIME}"
+    knmi2influxdb.py --time actual --station 260 --outuri "http://localhost:8086/write?db=smarthome&precision=s" --query "temperature outside_knmi{STN}={T:.1f} {DATETIME}"
 
-    knmi2influxdb.py /tmp/knmidata-query.csv "http://localhost:8086/write?db=smarthome&precision=s" --query "temperature outside_knmi{STN}={T:.1f} {DATETIME}"
+    knmi2influxdb.py --time actual --station 260 --outuri out-file.csv
 
-    knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-influxformat.csv
-
-    knmi2influxdb.py KNMI /tmp/knmidata-influxformat.csv
+    knmi2influxdb.py --time historical --station 260 --outuri out-file.csv
 
 ## Data source
 
 Script can get data in two methods:
 1. Live from KNMI
-2. From file pre-fetched from KNMI
 
 ## Output data
 
@@ -26,7 +26,15 @@ The script can either:
 
 # Background
 
-## Getting KNMI data
+## Getting live KNMI data
+
+Get data from
+
+    https://data.knmi.nl/datasets/Actuele10mindataKNMIstations/1
+
+then parse using netCDF, insert into influxdb.
+
+## Getting historical KNMI data
 
 One can get data via script from
 
