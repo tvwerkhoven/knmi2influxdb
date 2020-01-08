@@ -112,6 +112,7 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 	# https://stackoverflow.com/questions/22676/how-do-i-download-a-file-over-http-using-python/22776#22776
 	utcnow = datetime.datetime.utcnow()
 	URI = "https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/{year}/{month:02}/{day:02}/KMDS__OPER_P___10M_OBS_L2.nc".format(year=utcnow.year, month=utcnow.month, day=utcnow.day)
+	URI="https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1900.nc"
 	urllib.request.urlretrieve(URI, "/tmp/KMDS__OPER_P___10M_OBS_L2.nc")
 	rootgrp = netCDF4.Dataset("/tmp/KMDS__OPER_P___10M_OBS_L2.nc", "r", format="NETCDF4")
 
@@ -181,18 +182,23 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 
 	fieldval = {'NEWLINE':"\n"}
 	# time units is: seconds since 1950-01-01 00:00:00
-	fieldval['DATETIME'] = netCDF4.num2date(rootgrp["/time"][:], rootgrp["/time"].units)[0]
-	fieldval['STN'] = stationid
+	naivetime = netCDF4.num2date(rootgrp["/time"][:], rootgrp["/time"].units)[0]
+	# Cumbersome way to make into utc timestamp
+	obstime = datetime.datetime(naivetime.year, naivetime.month, naivetime.day, naivetime.hour, naivetime.minute, tzinfo=datetime.timezone.utc)
+	fieldval['DATETIME'] = int(obstime.timestamp())
+	# tzinfo=datetime.timezone.utc
+	fieldval['STN'] = knmistation
 	fieldval['T'] = rootgrp["/ta"][stationid][0]
 	fieldval['FF'] = rootgrp["/ff"][stationid][0]
 	fieldval['FX'] = rootgrp["/gff"][stationid][0]
 	fieldval['DD'] = rootgrp["/dd"][stationid][0]
 	fieldval['Q'] = rootgrp["/qg"][stationid][0]
 	# fieldval['SQ'] = rootgrp["/gq"][stationid]
-	fieldval['DR'] = rootgrp["/pr"][stationid][0]
+	# fieldval['DR'] = rootgrp["/dr"][stationid][0]/600. # seconds to fraction
+	fieldval['DR'] = rootgrp["/D1H"][stationid][0]/60. # minutes to fraction
 	fieldval['RH'] = rootgrp["/R1H"][stationid][0]
 	fieldval['P'] = rootgrp["/pp"][stationid][0]
-	
+
 	fmt = PartialFormatter()
 	outline = fmt.format(query, **fieldval)
 
