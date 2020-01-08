@@ -112,7 +112,6 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 	# https://stackoverflow.com/questions/22676/how-do-i-download-a-file-over-http-using-python/22776#22776
 	utcnow = datetime.datetime.utcnow()
 	URI = "https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/{year}/{month:02}/{day:02}/KMDS__OPER_P___10M_OBS_L2.nc".format(year=utcnow.year, month=utcnow.month, day=utcnow.day)
-	URI="https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1900.nc"
 	urllib.request.urlretrieve(URI, "/tmp/KMDS__OPER_P___10M_OBS_L2.nc")
 	rootgrp = netCDF4.Dataset("/tmp/KMDS__OPER_P___10M_OBS_L2.nc", "r", format="NETCDF4")
 
