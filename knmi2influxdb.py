@@ -264,10 +264,13 @@ def convert_knmi(knmidata, query):
 
 			# Construct datetime from date and hour fields
 			# N.B. Although observations run from hour-1 to hour, (e.g. 
-			# slot 1 runs from 00:00 to 01:00), most measurements are taken 
-			# at the end of the slot, so we use that timestamp as given.
+			# slot 1 runs from 00:00 to 01:00: 'Uurvak 05 loopt van 04.00 UT 
+			# tot 5.00 UT'), most measurements are taken at the end of the
+			# slot, so we use that timestamp as given, which is good enough.
 			# N.B. HH runs from 1-24, so we can't make a time directly 
-			# (which runs from 0-23), so instead we add as timedelta
+			# (which runs from 0-23) for hour 24, so instead we add as 
+			# timedelta to allow for wrapping over days (e.g. 1->1, 2->2, 
+			# but 24->0 next day)
 			# N.B. timestamp() only works in python3
 			fieldval['DATETIME'] = int((fieldval['YYYYMMDD'] + datetime.timedelta(hours=fieldval['HH'])).timestamp())
 
