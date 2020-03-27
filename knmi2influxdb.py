@@ -59,6 +59,8 @@ import csv
 import argparse
 import datetime
 import netCDF4
+import logging
+import time
 
 #DEFAULTQUERY='test,src=outside_knmi{STN} wind={DD},windspeed={FF:.1f},temp={T:.1f},irrad={Q:.2f},rain={RH:.1f} {DATETIME}'
 #DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
@@ -92,12 +94,27 @@ class PartialFormatter(string.Formatter):
             if self.bad_fmt is not None: return self.bad_fmt   
             else: raise
 
-def get_knmi_data_historical(knmistation=KNMISTATION, history=21):
-	# Get data from last 21 days by default
-	start = datetime.datetime.now() - datetime.timedelta(days=history)
+def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
+	logging.debug("get_knmi_data_historical(knmistation={}, histrange={})".format(knmistation, histrange))
+	if len(histrange) == 1:
+		histdays = histrange[0]
+		# Get data from last 21 days by default
+		histstart = datetime.datetime.now() - datetime.timedelta(days=histrange)
+		knmiquery = "start={}01&vars=ALL&stns={}".format(histstart.strftime("%Y%m%d"), knmistation)
+	elif len(histrange) == 2:
+		histstart, histend = histrange
+		# Try parsing histrange to see if formatting is OK (if strptime is happy, KNMI should be happy)
+		try:
+			a = (time.strptime(histstart,"%Y%m%d"))
+			b = (time.strptime(histend,"%Y%m%d"))
+		except:
+			ValueError("histrange formatting not OK, should be YYYYMMDD")
+		knmiquery = "start={}01&end={}24&vars=ALL&stns={}".format(histstart, histend, knmistation)
+	else:
+		raise ValueError("histrange should be either [days] or [start, end] and thus have 1 or 2 elements.")
 	
 	knmiuri = 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi'
-	knmiquery = "start={}01&vars=ALL&stns={}".format(start.strftime("%Y%m%d"), knmistation)
+	logging.info("get_knmi_data_historical(): getting query={}".format(knmiquery))
 
 	# Query can take quite long, set long-ish timeout
 	r = requests.post(knmiuri, data=knmiquery, timeout=30)
@@ -306,9 +323,12 @@ def influxdb_output(outuri, influxdata):
 			fdo.write("\n".join(influxdata))
 
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s')
+logging.debug("Init logging & parsing command line args.")
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description="Convert KNMI data to influxdb line protocol. Optionally insert into database directly")
 parser.add_argument("--time", choices=['actual', 'historical'], help="Get actual (default, updated in 10-min interval) or historical (hourly, updated daily) data. ", default='actual')
+parser.add_argument("--histrange", help="Time range to get historical data for. Either days since now (if one parameter), or timerange in format of YYYYMMDD (if two parameters)", nargs="*", default='21')
 parser.add_argument("--station", help="""KNMI station (default: de Bilt). Possible values:
 	210: Valkenburg
 	215: Voorschoten
@@ -355,7 +375,7 @@ args = parser.parse_args()
 
 influxdata=None
 if (args.time == 'historical'):
-	knmidata = get_knmi_data_historical(args.station)
+	knmidata = get_knmi_data_historical(args.station, args.histrange)
 	influxdata = convert_knmi(knmidata, args.query)
 else:
 	influxdata = get_knmi_data_actual(args.station, args.query)
