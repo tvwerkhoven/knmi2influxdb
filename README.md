@@ -16,8 +16,8 @@ Better than scraping websites ;)
 ## Data source
 
 Script can get data in two methods:
-1. Live from KNMI
-2. From file (disabled now)
+1. Live from KNMI (10-min resolution, updated every 10min)
+2. Historical from KNMI (1-hr resolution, updated daily, any timespan)
 
 ## Output data
 
@@ -33,7 +33,9 @@ Get data from
 
     https://data.knmi.nl/datasets/Actuele10mindataKNMIstations/1
 
-then parse using netCDF, insert into influxdb.
+then parse using netCDF, insert into influxdb. Example:
+
+    knmi2influxdb.py --time actual --station 260 --outuri "http://localhost:8086/write?db=smarthome&precision=s" --query "temperature outside_knmi{STN}={T:.1f} {DATETIME}"
 
 ## Getting historical KNMI data
 
@@ -45,33 +47,34 @@ e.g.
 
     curl 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi' -d "start=$(date --date yesterday +'%Y%m%d')01&vars=ALL&stns=260" -o /tmp/knmidata-query.csv
 
+or for a timerange in the past
+
+    BEG=20180101
+    END=20190911
+    
+    curl 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi' -d "start=${BEG}01&end=${END}24&vars=ALL&stns=260" -o knmidata-query.csv
+
 or manually from
 
     http://projects.knmi.nl/klimatologie/uurgegevens/selectie.cgi
 
-## Convert to influx line format
+Using knmi2influxdb.py to fetch data and convert to lineformat for last 21 days:
 
-Use knmi2influxdb.py, e.g. (does not work at the moment)
+    knmi2influxdb.py --time historical --histrange 21 --station 260 --outuri knmidata-influxformat.csv
 
-    python3 knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-influxformat.csv --query "temperature outside_knmi{STN}={T:.1f} {date}"
+or for a specific timerange:
 
-## Insert into influxdb
+    knmi2influxdb.py --time historical --histrange 20171101 20180101 --station 260 --query "temperature outside_knmi{STN}={T:.1f} {DATETIME}" --outuri knmidata-influxformat.csv
+    knmi2influxdb.py --time historical --histrange 20160701 20180101 --station 260 --query "energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME} {DATETIME}" --outuri knmidata-influxformat.csv
+
+### Insert into influxdb
 
 Use curl to post datafile
 
-    curl -i -XPOST "http://localhost:8086/write?db=smarthome&precision=s" --data-binary @/tmp/knmidata-influxformat.csv
+    curl -i -XPOST "https://localhost:8086/write?db=smarthome&precision=s" --data-binary @/tmp/knmidata-influxformat.csv
 
-## Get one time fix
+# References
 
-Use this to get bulk data from KNMI and insert into influxdb. We split this in
-multiple steps to allow debugging along the way.
-
-	BEG=20180101
-	END=20190911
-	
-	curl 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi' -d "start=${BEG}01&end=${END}24&vars=ALL&stns=260" -o /tmp/knmidata-query.csv
-	
-	python3 knmi2influxdb.py /tmp/knmidata-query.csv /tmp/knmidata-influxformat.csv --query 'temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
-	
-	curl -i -XPOST "http://localhost:8086/write?db=smarthome&precision=s" --data-binary @/tmp/knmidata-influxformat.csv
-
+- https://www.knmi.nl/kennis-en-datacentrum/achtergrond/data-ophalen-vanuit-een-script
+- http://projects.knmi.nl/klimatologie/uurgegevens/
+- https://data.knmi.nl/download/Actuele10mindataKNMIstations/1
