@@ -123,6 +123,7 @@ def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 	return r.text.splitlines()
 
 def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
+	logging.debug("get_knmi_data_actual(knmistation={}, query={})".format(knmistation, query))
 	# Get real-time data from now, store to disk (netCDF https support is limited)
 	# Latest:        https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2.nc
 	# Specific time: https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1620.nc
@@ -223,6 +224,7 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 	return [outline]
 
 def convert_knmi(knmidata, query):
+	logging.debug("convert_knmi(knmidata, query={})".format(query))
 	start = False
 	fieldpos = {}
 	fieldval = {'NEWLINE':"\n"}
@@ -315,6 +317,7 @@ def convert_knmi(knmidata, query):
 	return parsed_lines
 
 def influxdb_output(outuri, influxdata):
+	logging.debug("influxdb_output(outuri={}, influxdata)".format(outuri))
 	if (outuri[:4].lower() == 'http'):
 		r = requests.post(outuri, data="\n".join(influxdata), timeout=10)
 	else:
@@ -372,7 +375,7 @@ parser.add_argument("--outuri", help="Output target, either influxdb server (if 
 parser.add_argument("--query", help="Query template for influxdb line protocol, where {DATETIME}=UT date in seconds since epoch, {STN}=station, {T}=temp in C, {FF}=windspeed in m/s, {FX}=windgust in m/s, {DD}=wind direction in deg, {Q}=irradiance in W/m^2, {RH}=precipitation in mm, {NEWLINE} is newline, e.g. 'weather,device=knmi temp={T} wind={DD}'", default=DEFAULTQUERY)
 args = parser.parse_args()
 
-
+logging.debug("Got command line args:" + str(args))
 influxdata=None
 if (args.time == 'historical'):
 	knmidata = get_knmi_data_historical(args.station, args.histrange)
