@@ -97,9 +97,9 @@ class PartialFormatter(string.Formatter):
 def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 	logging.debug("get_knmi_data_historical(knmistation={}, histrange={})".format(knmistation, histrange))
 	if len(histrange) == 1:
-		histdays = histrange[0]
+		histdays = int(histrange[0])
 		# Get data from last 21 days by default
-		histstart = datetime.datetime.now() - datetime.timedelta(days=histrange)
+		histstart = datetime.datetime.now() - datetime.timedelta(days=histdays)
 		knmiquery = "start={}01&vars=ALL&stns={}".format(histstart.strftime("%Y%m%d"), knmistation)
 	elif len(histrange) == 2:
 		histstart, histend = histrange
@@ -328,7 +328,7 @@ logging.debug("Init logging & parsing command line args.")
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description="Convert KNMI data to influxdb line protocol. Optionally insert into database directly")
 parser.add_argument("--time", choices=['actual', 'historical'], help="Get actual (default, updated in 10-min interval) or historical (hourly, updated daily) data. ", default='actual')
-parser.add_argument("--histrange", help="Time range to get historical data for. Either days since now (if one parameter), or timerange in format of YYYYMMDD (if two parameters)", nargs="*", default='21')
+parser.add_argument("--histrange", help="Time range to get historical data for. Either days since now (if one parameter), or timerange in format of YYYYMMDD (if two parameters)", nargs="*", default=['21'])
 parser.add_argument("--station", help="""KNMI station (default: de Bilt). Possible values:
 	210: Valkenburg
 	215: Voorschoten
