@@ -339,21 +339,17 @@ def influxdb_output(outuri, influxdata):
 		with open(outuri, 'w+') as fdo:
 			fdo.write("\n".join(influxdata))
 
+# Init logger, defaults to console
 my_logger = logging.getLogger("MyLogger")
 my_logger.setLevel(logging.DEBUG)
 
-# create console handler with a higher log level
-# handler_console = logging.StreamHandler()
-# handler_console.setLevel(logging.DEBUG)
-# my_logger.addHandler(handler_console)
-
 # create syslog handler which also shows filename in log
-handler_syslog = logging.handlers.SysLogHandler(address = '/dev/log', facility=logging.handlers.SysLogHandler.LOG_DAEMON)
+handler_syslog = logging.handlers.SysLogHandler(address = '/dev/log')
 formatter = logging.Formatter('%(filename)s: %(message)s')
 handler_syslog.setFormatter(formatter)
+handler_syslog.setLevel(logging.INFO)
 my_logger.addHandler(handler_syslog)
 
-# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s')
 my_logger.debug("Init logging & parsing command line args.")
 
 # Parse commandline arguments
