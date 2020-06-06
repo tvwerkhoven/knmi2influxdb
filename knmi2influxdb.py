@@ -60,6 +60,7 @@ import argparse
 import datetime
 import netCDF4
 import logging
+import logging.handlers
 import time
 
 #DEFAULTQUERY='test,src=outside_knmi{STN} wind={DD},windspeed={FF:.1f},temp={T:.1f},irrad={Q:.2f},rain={RH:.1f} {DATETIME}'
@@ -73,29 +74,31 @@ KNMISTATION=260 # KNMI station for getting live data. See http://projects.knmi.n
 # https://stackoverflow.com/questions/20248355/how-to-get-python-to-gracefully-format-none-and-non-existing-fields
 import string
 class PartialFormatter(string.Formatter):
-    def __init__(self, missing='~~', bad_fmt='!!'):
-        self.missing, self.bad_fmt=missing, bad_fmt
+	def __init__(self, missing='~~', bad_fmt='!!'):
+		self.missing, self.bad_fmt=missing, bad_fmt
 
-    def get_field(self, field_name, args, kwargs):
-        # Handle a key not found
-        try:
-            val=super(PartialFormatter, self).get_field(field_name, args, kwargs)
-            # Python 3, 'super().get_field(field_name, args, kwargs)' works
-        except (KeyError, AttributeError):
-            val=None,field_name 
-        return val 
+	def get_field(self, field_name, args, kwargs):
+		# Handle a key not found
+		try:
+			val=super(PartialFormatter, self).get_field(field_name, args, kwargs)
+			# Python 3, 'super().get_field(field_name, args, kwargs)' works
+		except (KeyError, AttributeError):
+			val=None,field_name 
+		return val 
 
-    def format_field(self, value, spec):
-        # handle an invalid format
-        if value==None: return self.missing
-        try:
-            return super(PartialFormatter, self).format_field(value, spec)
-        except ValueError:
-            if self.bad_fmt is not None: return self.bad_fmt   
-            else: raise
+	def format_field(self, value, spec):
+		# handle an invalid format
+		if value==None: return self.missing
+		try:
+			return super(PartialFormatter, self).format_field(value, spec)
+		except ValueError:
+			if self.bad_fmt is not None: return self.bad_fmt   
+			else: 
+				my_logger.exception("Exception occurred in format_field()")
+				raise
 
 def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
-	logging.debug("get_knmi_data_historical(knmistation={}, histrange={})".format(knmistation, histrange))
+	my_logger.debug("get_knmi_data_historical(knmistation={}, histrange={})".format(knmistation, histrange))
 	if len(histrange) == 1:
 		histdays = int(histrange[0])
 		# Get data from last 21 days by default
@@ -108,13 +111,15 @@ def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 			a = (time.strptime(histstart,"%Y%m%d"))
 			b = (time.strptime(histend,"%Y%m%d"))
 		except:
-			ValueError("histrange formatting not OK, should be YYYYMMDD")
+			my_logger.exception("Exception occurred")
+			raise ValueError("histrange formatting not OK, should be YYYYMMDD")
 		knmiquery = "start={}01&end={}24&vars=ALL&stns={}".format(histstart, histend, knmistation)
 	else:
+		my_logger.exception("Exception occurred")
 		raise ValueError("histrange should be either [days] or [start, end] and thus have 1 or 2 elements.")
 	
 	knmiuri = 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi'
-	logging.info("get_knmi_data_historical(): getting query={}".format(knmiquery))
+	my_logger.info("get_knmi_data_historical(): getting query={}".format(knmiquery))
 
 	# Query can take quite long, set long-ish timeout
 	r = requests.post(knmiuri, data=knmiquery, timeout=30)
@@ -123,7 +128,7 @@ def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 	return r.text.splitlines()
 
 def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
-	logging.debug("get_knmi_data_actual(knmistation={}, query={})".format(knmistation, query))
+	my_logger.debug("get_knmi_data_actual(knmistation={}, query={})".format(knmistation, query))
 	# Get real-time data from now, store to disk (netCDF https support is limited)
 	# Latest:        https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2.nc
 	# Specific time: https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1620.nc
@@ -224,7 +229,7 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 	return [outline]
 
 def convert_knmi(knmidata, query):
-	logging.debug("convert_knmi(knmidata, query={})".format(query))
+	my_logger.debug("convert_knmi(knmidata, query={})".format(query))
 	start = False
 	fieldpos = {}
 	fieldval = {'NEWLINE':"\n"}
@@ -264,6 +269,7 @@ def convert_knmi(knmidata, query):
 				fieldpos['RH'] = row.index("RH")
 				fieldpos['P'] = row.index("P")
 			except ValueError as e:
+				my_logger.exception("KNMI data file incompatible, could not find fields HH, DD or others")
 				quit("KNMI data file incompatible, could not find fields HH, DD or others: {}".format(e))
 			start = True
 
@@ -301,7 +307,11 @@ def convert_knmi(knmidata, query):
 			outline_fix = []
 			for l in outline.split('\n'):
 				# First get field sets by splitting by space into three parts (https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/)
-				outline_meas, outline_field, outline_time = l.split(' ')
+				try:
+					outline_meas, outline_field, outline_time = l.split(' ')
+				except:
+					my_logger.exception("Could not unpack line: {}".format(l))
+
 				# Replace None values
 				outline_field = ','.join([w for w in outline_field.split(',') if not '~~' in w])
 				outline_fix.append(" ".join([outline_meas, outline_field, outline_time]))
@@ -317,17 +327,35 @@ def convert_knmi(knmidata, query):
 	return parsed_lines
 
 def influxdb_output(outuri, influxdata):
-	logging.debug("influxdb_output(outuri={}, influxdata)".format(outuri))
+	my_logger.debug("influxdb_output(outuri={}, influxdata)".format(outuri))
 	if (outuri[:4].lower() == 'http'):
 		r = requests.post(outuri, data="\n".join(influxdata), timeout=10)
+		if r.status_code == 204:
+			my_logger.debug("Query successfully handed to influxdb.")
+		else:
+			my_logger.error("Could not push to influxdb: {} - {}".format(r.status_code, r.content))
 	else:
 		# Store to file
 		with open(outuri, 'w+') as fdo:
 			fdo.write("\n".join(influxdata))
 
+my_logger = logging.getLogger("MyLogger")
+my_logger.setLevel(logging.DEBUG)
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s')
-logging.debug("Init logging & parsing command line args.")
+# create console handler with a higher log level
+# handler_console = logging.StreamHandler()
+# handler_console.setLevel(logging.DEBUG)
+# my_logger.addHandler(handler_console)
+
+# create syslog handler which also shows filename in log
+handler_syslog = logging.handlers.SysLogHandler(address = '/dev/log', facility=logging.handlers.SysLogHandler.LOG_DAEMON)
+formatter = logging.Formatter('%(filename)s: %(message)s')
+handler_syslog.setFormatter(formatter)
+my_logger.addHandler(handler_syslog)
+
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s')
+my_logger.debug("Init logging & parsing command line args.")
+
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description="Convert KNMI data to influxdb line protocol. Optionally insert into database directly")
 parser.add_argument("--time", choices=['actual', 'historical'], help="Get actual (default, updated in 10-min interval) or historical (hourly, updated daily) data. ", default='actual')
