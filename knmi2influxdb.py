@@ -59,6 +59,8 @@ import csv
 import argparse
 import datetime
 import netCDF4
+import logging
+import time
 
 #DEFAULTQUERY='test,src=outside_knmi{STN} wind={DD},windspeed={FF:.1f},temp={T:.1f},irrad={Q:.2f},rain={RH:.1f} {DATETIME}'
 #DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
@@ -92,12 +94,27 @@ class PartialFormatter(string.Formatter):
             if self.bad_fmt is not None: return self.bad_fmt   
             else: raise
 
-def get_knmi_data_historical(knmistation=KNMISTATION, history=21):
-	# Get data from last 21 days by default
-	start = datetime.datetime.now() - datetime.timedelta(days=history)
+def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
+	logging.debug("get_knmi_data_historical(knmistation={}, histrange={})".format(knmistation, histrange))
+	if len(histrange) == 1:
+		histdays = int(histrange[0])
+		# Get data from last 21 days by default
+		histstart = datetime.datetime.now() - datetime.timedelta(days=histdays)
+		knmiquery = "start={}01&vars=ALL&stns={}".format(histstart.strftime("%Y%m%d"), knmistation)
+	elif len(histrange) == 2:
+		histstart, histend = histrange
+		# Try parsing histrange to see if formatting is OK (if strptime is happy, KNMI should be happy)
+		try:
+			a = (time.strptime(histstart,"%Y%m%d"))
+			b = (time.strptime(histend,"%Y%m%d"))
+		except:
+			ValueError("histrange formatting not OK, should be YYYYMMDD")
+		knmiquery = "start={}01&end={}24&vars=ALL&stns={}".format(histstart, histend, knmistation)
+	else:
+		raise ValueError("histrange should be either [days] or [start, end] and thus have 1 or 2 elements.")
 	
 	knmiuri = 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi'
-	knmiquery = "start={}01&vars=ALL&stns={}".format(start.strftime("%Y%m%d"), knmistation)
+	logging.info("get_knmi_data_historical(): getting query={}".format(knmiquery))
 
 	# Query can take quite long, set long-ish timeout
 	r = requests.post(knmiuri, data=knmiquery, timeout=30)
@@ -106,6 +123,7 @@ def get_knmi_data_historical(knmistation=KNMISTATION, history=21):
 	return r.text.splitlines()
 
 def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
+	logging.debug("get_knmi_data_actual(knmistation={}, query={})".format(knmistation, query))
 	# Get real-time data from now, store to disk (netCDF https support is limited)
 	# Latest:        https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2.nc
 	# Specific time: https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1620.nc
@@ -206,6 +224,7 @@ def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
 	return [outline]
 
 def convert_knmi(knmidata, query):
+	logging.debug("convert_knmi(knmidata, query={})".format(query))
 	start = False
 	fieldpos = {}
 	fieldval = {'NEWLINE':"\n"}
@@ -264,10 +283,13 @@ def convert_knmi(knmidata, query):
 
 			# Construct datetime from date and hour fields
 			# N.B. Although observations run from hour-1 to hour, (e.g. 
-			# slot 1 runs from 00:00 to 01:00), most measurements are taken 
-			# at the end of the slot, so we use that timestamp as given.
+			# slot 1 runs from 00:00 to 01:00: 'Uurvak 05 loopt van 04.00 UT 
+			# tot 5.00 UT'), most measurements are taken at the end of the
+			# slot, so we use that timestamp as given, which is good enough.
 			# N.B. HH runs from 1-24, so we can't make a time directly 
-			# (which runs from 0-23), so instead we add as timedelta
+			# (which runs from 0-23) for hour 24, so instead we add as 
+			# timedelta to allow for wrapping over days (e.g. 1->1, 2->2, 
+			# but 24->0 next day)
 			# N.B. timestamp() only works in python3
 			fieldval['DATETIME'] = int((fieldval['YYYYMMDD'] + datetime.timedelta(hours=fieldval['HH'])).timestamp())
 
@@ -295,6 +317,7 @@ def convert_knmi(knmidata, query):
 	return parsed_lines
 
 def influxdb_output(outuri, influxdata):
+	logging.debug("influxdb_output(outuri={}, influxdata)".format(outuri))
 	if (outuri[:4].lower() == 'http'):
 		r = requests.post(outuri, data="\n".join(influxdata), timeout=10)
 	else:
@@ -303,9 +326,12 @@ def influxdb_output(outuri, influxdata):
 			fdo.write("\n".join(influxdata))
 
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s')
+logging.debug("Init logging & parsing command line args.")
 # Parse commandline arguments
 parser = argparse.ArgumentParser(description="Convert KNMI data to influxdb line protocol. Optionally insert into database directly")
 parser.add_argument("--time", choices=['actual', 'historical'], help="Get actual (default, updated in 10-min interval) or historical (hourly, updated daily) data. ", default='actual')
+parser.add_argument("--histrange", help="Time range to get historical data for. Either days since now (if one parameter), or timerange in format of YYYYMMDD (if two parameters)", nargs="*", default=['21'])
 parser.add_argument("--station", help="""KNMI station (default: de Bilt). Possible values:
 	210: Valkenburg
 	215: Voorschoten
@@ -349,10 +375,10 @@ parser.add_argument("--outuri", help="Output target, either influxdb server (if 
 parser.add_argument("--query", help="Query template for influxdb line protocol, where {DATETIME}=UT date in seconds since epoch, {STN}=station, {T}=temp in C, {FF}=windspeed in m/s, {FX}=windgust in m/s, {DD}=wind direction in deg, {Q}=irradiance in W/m^2, {RH}=precipitation in mm, {NEWLINE} is newline, e.g. 'weather,device=knmi temp={T} wind={DD}'", default=DEFAULTQUERY)
 args = parser.parse_args()
 
-
+logging.debug("Got command line args:" + str(args))
 influxdata=None
 if (args.time == 'historical'):
-	knmidata = get_knmi_data_historical(args.station)
+	knmidata = get_knmi_data_historical(args.station, args.histrange)
 	influxdata = convert_knmi(knmidata, args.query)
 else:
 	influxdata = get_knmi_data_actual(args.station, args.query)
