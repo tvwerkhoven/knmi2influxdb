@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 #
+# # About
+# 
 # Convert KNMI hourly CSV data to influxdb line protocol.
 # 
 # Input can be either a KNMI data file, or the script can query data directly
 # Output can be either a file, or a URI to an influxdb server to push data directly.
+#
+# # Quick start
+#
+# /usr/bin/python3 knmi2influxdb.py --time actual --station 260
 # 
-# References
+# # References
 #
 # - https://www.knmi.nl/kennis-en-datacentrum/achtergrond/data-ophalen-vanuit-een-script
 # - http://projects.knmi.nl/klimatologie/uurgegevens/
@@ -127,15 +133,49 @@ def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 	# Return line-wise iterable for next stage
 	return r.text.splitlines()
 
-def get_knmi_data_actual(knmistation=KNMISTATION, query=DEFAULTQUERY):
+def get_knmi_data_actual(api_key, knmistation=KNMISTATION, query=DEFAULTQUERY):
 	my_logger.debug("get_knmi_data_actual(knmistation={}, query={})".format(knmistation, query))
 	# Get real-time data from now, store to disk (netCDF https support is limited)
+
+	# Old approach (deprecated)
 	# Latest:        https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2.nc
 	# Specific time: https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1620.nc
 	# https://stackoverflow.com/questions/22676/how-do-i-download-a-file-over-http-using-python/22776#22776
-	utcnow = datetime.datetime.utcnow()
-	URI = "https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/{year}/{month:02}/{day:02}/KMDS__OPER_P___10M_OBS_L2.nc".format(year=utcnow.year, month=utcnow.month, day=utcnow.day)
-	urllib.request.urlretrieve(URI, "/tmp/KMDS__OPER_P___10M_OBS_L2.nc")
+
+	# utcnow = datetime.datetime.utcnow()
+	# URI = "https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/{year}/{month:02}/{day:02}/KMDS__OPER_P___10M_OBS_L2.nc".format(year=utcnow.year, month=utcnow.month, day=utcnow.day)
+	# urllib.request.urlretrieve(URI, "/tmp/KMDS__OPER_P___10M_OBS_L2.nc")
+
+	# New approach 20200800: https://developer.dataplatform.knmi.nl/portal/example-scripts#list-10-files
+	# Get latest file with data
+	api_url = "https://api.dataplatform.knmi.nl/open-data"
+	dataset_name = "Actuele10mindataKNMIstations"
+	dataset_version = "2"
+
+	# Get 10 files since one hour ago, which should show the latest 6 files. We take the last file of this, which should be the newest. Guaranteed to work if files are available max 1 hour later
+	timestamp_now = datetime.datetime.utcnow()
+	timestamp_one_hour_ago = timestamp_now - datetime.timedelta(hours=1)
+	filename_one_hour_ago = f"KMDS__OPER_P___10M_OBS_L2_{timestamp_one_hour_ago.strftime('%Y%m%d%H%M')}.nc"
+	list_files_response = requests.get(f"{api_url}/datasets/{dataset_name}/versions/{dataset_version}/files",
+		headers={"Authorization": api_key},
+		params={"maxKeys": 10, "startAfterFilename": filename_one_hour_ago})
+	list_files = list_files_response.json()
+	filename = list_files.get("files")[-1].get("filename")
+
+	# Get latest file by constructing filename ourselves. Could fail if there's a delay before the files are available.
+	# timestamp_now = datetime.datetime.utcnow()
+	# timestamp_one_hour_ago = timestamp_now - timedelta(hours=1) - datetime.timedelta(minutes=timestamp_now.minute % 10)
+	# filename = f"KMDS__OPER_P___10M_OBS_L2_{timestamp_one_hour_ago.strftime('%Y%m%d%H%M')}.nc"
+
+	# Get data file
+	endpoint = f"{api_url}/datasets/{dataset_name}/versions/{dataset_version}/files/{filename}/url"
+	my_logger.debug(f"get_knmi_data_actual: getting {endpoint}")
+
+	get_file_response = requests.get(endpoint, headers={"Authorization": api_key})
+	download_url = get_file_response.json().get("temporaryDownloadUrl")
+	dataset_file = requests.get(download_url,)
+	urllib.request.urlretrieve(download_url, "/tmp/KMDS__OPER_P___10M_OBS_L2.nc")
+
 	rootgrp = netCDF4.Dataset("/tmp/KMDS__OPER_P___10M_OBS_L2.nc", "r", format="NETCDF4")
 
 	# Data file contains the following variables:
@@ -395,6 +435,7 @@ parser.add_argument("--station", help="""KNMI station (default: de Bilt). Possib
 	377: Ell
 	380: Maastricht
 	391: Arcen""", default=260)
+parser.add_argument("--api_key", help="KNMI opendata api key, required for actuals.")
 parser.add_argument("--outuri", help="Output target, either influxdb server (if starts with http, e.g. http://localhost:8086/write?db=smarthome&precision=s), or filename (else)")
 parser.add_argument("--query", help="Query template for influxdb line protocol, where {DATETIME}=UT date in seconds since epoch, {STN}=station, {T}=temp in C, {FF}=windspeed in m/s, {FX}=windgust in m/s, {DD}=wind direction in deg, {Q}=irradiance in W/m^2, {RH}=precipitation in mm, {NEWLINE} is newline, e.g. 'weather,device=knmi temp={T} wind={DD}'", default=DEFAULTQUERY)
 args = parser.parse_args()
@@ -405,9 +446,12 @@ if (args.time == 'historical'):
 	knmidata = get_knmi_data_historical(args.station, args.histrange)
 	influxdata = convert_knmi(knmidata, args.query)
 else:
-	influxdata = get_knmi_data_actual(args.station, args.query)
+	if (not args.api_key):
+		logging.error("Need apikey for actual data query.")
+	influxdata = get_knmi_data_actual(args.api_key, args.station, args.query)
 
 if (args.outuri):
 	influxdb_output(args.outuri, influxdata)
-
+else:
+	print (influxdata)
 # Run for live data
