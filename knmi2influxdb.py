@@ -366,10 +366,10 @@ def convert_knmi(knmidata, query):
 
 	return parsed_lines
 
-def influxdb_output(outuri, influxdata):
+def influxdb_output(outuri, influxdata, influxusername=None, influxpassword=None):
 	my_logger.debug("influxdb_output(outuri={}, influxdata)".format(outuri))
 	if (outuri[:4].lower() == 'http'):
-		r = requests.post(outuri, data="\n".join(influxdata), timeout=10)
+		r = requests.post(outuri, data="\n".join(influxdata), timeout=10, auth=(influxusername, influxpassword))
 		if r.status_code == 204:
 			my_logger.debug("Query successfully handed to influxdb.")
 		else:
@@ -437,6 +437,8 @@ parser.add_argument("--station", help="""KNMI station (default: de Bilt). Possib
 	391: Arcen""", default=260)
 parser.add_argument("--api_key", help="KNMI opendata api key, required for actuals.")
 parser.add_argument("--outuri", help="Output target, either influxdb server (if starts with http, e.g. http://localhost:8086/write?db=smarthome&precision=s), or filename (else)")
+parser.add_argument("--influxusername", help="Influxdb username (if outuri points to influxdb server)")
+parser.add_argument("--influxpassword", help="Influxdb password (if outuri points to influxdb server)")
 parser.add_argument("--query", help="Query template for influxdb line protocol, where {DATETIME}=UT date in seconds since epoch, {STN}=station, {T}=temp in C, {FF}=windspeed in m/s, {FX}=windgust in m/s, {DD}=wind direction in deg, {Q}=irradiance in W/m^2, {RH}=precipitation in mm, {NEWLINE} is newline, e.g. 'weather,device=knmi temp={T} wind={DD}'", default=DEFAULTQUERY)
 args = parser.parse_args()
 
@@ -451,7 +453,7 @@ else:
 	influxdata = get_knmi_data_actual(args.api_key, args.station, args.query)
 
 if (args.outuri):
-	influxdb_output(args.outuri, influxdata)
+	influxdb_output(args.outuri, influxdata, influxusername=args.influxusername, influxpassword=args.influxpassword)
 else:
 	print (influxdata)
 # Run for live data
