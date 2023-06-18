@@ -68,6 +68,8 @@ import netCDF4
 import logging
 import logging.handlers
 import time
+import yaml
+
 
 #DEFAULTQUERY='test,src=outside_knmi{STN} wind={DD},windspeed={FF:.1f},temp={T:.1f},irrad={Q:.2f},rain={RH:.1f} {DATETIME}'
 #DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
@@ -379,6 +381,28 @@ def influxdb_output(outuri, influxdata, influxusername=None, influxpassword=None
 		with open(outuri, 'w+') as fdo:
 			fdo.write("\n".join(influxdata))
 
+def get_secrets(secretsfile):
+	"""
+	Get secrets from YAML file `secretsfile` as alternative to command line arguments
+	"""
+
+	with open(secretsfile, 'r') as stream:
+		try:
+			data = yaml.safe_load(stream)
+
+			# API key
+			KNMIAPIKEY = data['knmi2influxdb']['knmiapikey']
+
+			# Influxdb settings URI
+			INFLUX_USER = data['knmi2influxdb']['influx_username']
+			INFLUX_PASSWD = data['knmi2influxdb']['influx_password']
+
+	except yaml.YAMLError as exc:
+		my_logger.exception('Could not load yaml file: {}'.format(exc))
+
+	return KNMIAPIKEY, INFLUX_USER, INFLUX_PASSWD
+
+
 # Init logger, defaults to console
 my_logger = logging.getLogger("MyLogger")
 my_logger.setLevel(logging.DEBUG)
@@ -439,10 +463,16 @@ parser.add_argument("--api_key", help="KNMI opendata api key, required for actua
 parser.add_argument("--outuri", help="Output target, either influxdb server (if starts with http, e.g. http://localhost:8086/write?db=smarthome&precision=s), or filename (else)")
 parser.add_argument("--influxusername", help="Influxdb username (if outuri points to influxdb server)")
 parser.add_argument("--influxpassword", help="Influxdb password (if outuri points to influxdb server)")
+parser.add_argument("--secretsfile", help="YAML file containing secrets, e.g. KNMI API & Influddb authentication.")
 parser.add_argument("--query", help="Query template for influxdb line protocol, where {DATETIME}=UT date in seconds since epoch, {STN}=station, {T}=temp in C, {FF}=windspeed in m/s, {FX}=windgust in m/s, {DD}=wind direction in deg, {Q}=irradiance in W/m^2, {RH}=precipitation in mm, {NEWLINE} is newline, e.g. 'weather,device=knmi temp={T} wind={DD}'", default=DEFAULTQUERY)
 args = parser.parse_args()
 
 logging.debug("Got command line args:" + str(args))
+
+# Load secrets
+if (args.secretsfile):
+	args.api_key, args.influxusername, args.influxpassword = get_secrets(args.secretsfile)
+
 influxdata=None
 if (args.time == 'historical'):
 	knmidata = get_knmi_data_historical(args.station, args.histrange)
