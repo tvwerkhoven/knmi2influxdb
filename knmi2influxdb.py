@@ -75,6 +75,7 @@ import yaml
 #DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
 DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}'
 KNMISTATION=260 # KNMI station for getting live data. See http://projects.knmi.nl/klimatologie/uurgegevens/
+KNMIURI = 'https://www.daggegevens.knmi.nl/klimatologie/daggegevens'
 
 # Required for graceful None formatting, sometimes KNMI data has null entries, 
 # but influxdb does not recognize this. We solve this by rendering None and 
@@ -126,11 +127,10 @@ def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 		my_logger.exception("Exception occurred")
 		raise ValueError("histrange should be either [days] or [start, end] and thus have 1 or 2 elements.")
 	
-	knmiuri = 'http://projects.knmi.nl/klimatologie/uurgegevens/getdata_uur.cgi'
 	my_logger.info("get_knmi_data_historical(): getting query={}".format(knmiquery))
 
 	# Query can take quite long, set long-ish timeout
-	r = requests.post(knmiuri, data=knmiquery, timeout=30)
+	r = requests.post(KNMIURI, data=knmiquery, timeout=30)
 
 	# Return line-wise iterable for next stage
 	return r.text.splitlines()
