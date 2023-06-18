@@ -75,7 +75,7 @@ import yaml
 #DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}{NEWLINE}weatherv2 rain_duration_knmi{STN}={DR:.1f},rain_qty_knmi{STN}={RH:.1f},wind_speed_knmi{STN}={FF:.1f},wind_gust_knmi{STN}={FX:.1f},wind_dir_knmi{STN}={DD} {DATETIME}{NEWLINE}energyv2 irradiance_knmi{STN}={Q:.0f} {DATETIME}'
 DEFAULTQUERY='temperaturev2 outside_knmi{STN}={T:.1f} {DATETIME}'
 KNMISTATION=260 # KNMI station for getting live data. See http://projects.knmi.nl/klimatologie/uurgegevens/
-KNMIURI = 'https://www.daggegevens.knmi.nl/klimatologie/daggegevens'
+KNMIURI = 'https://www.daggegevens.knmi.nl/klimatologie/uurgegevens'
 
 # Required for graceful None formatting, sometimes KNMI data has null entries, 
 # but influxdb does not recognize this. We solve this by rendering None and 
@@ -110,23 +110,23 @@ def get_knmi_data_historical(knmistation=KNMISTATION, histrange=(21,)):
 	my_logger.debug("get_knmi_data_historical(knmistation={}, histrange={})".format(knmistation, histrange))
 	if len(histrange) == 1:
 		histdays = int(histrange[0])
-		# Get data from last 21 days by default
-		histstart = datetime.datetime.now() - datetime.timedelta(days=histdays)
-		knmiquery = "start={}01&vars=ALL&stns={}".format(histstart.strftime("%Y%m%d"), knmistation)
+		# Get data from last 21 days by default, explicitly determine end
+		histstart = (datetime.datetime.now() - datetime.timedelta(days=histdays)).strftime("%Y%m%d")
+		histend = (datetime.datetime.now()).strftime("%Y%m%d")
 	elif len(histrange) == 2:
 		histstart, histend = histrange
 		# Try parsing histrange to see if formatting is OK (if strptime is happy, KNMI should be happy)
 		try:
-			a = (time.strptime(histstart,"%Y%m%d"))
-			b = (time.strptime(histend,"%Y%m%d"))
+			_ = (time.strptime(histstart,"%Y%m%d"))
+			_ = (time.strptime(histend,"%Y%m%d"))
 		except:
 			my_logger.exception("Exception occurred")
 			raise ValueError("histrange formatting not OK, should be YYYYMMDD")
-		knmiquery = "start={}01&end={}24&vars=ALL&stns={}".format(histstart, histend, knmistation)
 	else:
 		my_logger.exception("Exception occurred")
 		raise ValueError("histrange should be either [days] or [start, end] and thus have 1 or 2 elements.")
 	
+	knmiquery = "start={}01&end={}24&vars=ALL&stns={}".format(histstart, histend, knmistation)
 	my_logger.info("get_knmi_data_historical(): getting query={}".format(knmiquery))
 
 	# Query can take quite long, set long-ish timeout
@@ -277,7 +277,7 @@ def convert_knmi(knmidata, query):
 	fieldval = {'NEWLINE':"\n"}
 	fieldfunc = {
 		'YYYYMMDD': lambda x: datetime.datetime(int(x[0:4]), int(x[4:6]), int(x[6:8]), tzinfo=datetime.timezone.utc), ## time
-		'HH': lambda x: int(x),
+		'H':  lambda x: int(x),
 		'DD': lambda x: int(x),
 		'FF': lambda x: int(x)/10,
 		'FX': lambda x: int(x)/10,
@@ -292,15 +292,15 @@ def convert_knmi(knmidata, query):
 	fmt=PartialFormatter()
 
 	for r in knmidata:
+		print(r)
 		row = r.replace(' ','').split(',')
-		# print(row)
-
+		
 		# Find start row (syntax should be like # STN,YYYYMMDD,   HH,   DD,   FH,   FF,   FX,    T,  T10,   TD,   SQ,    Q,   DR,   RH,    P,   VV,    N,    U,   WW,   IX,    M,    R,    S,    O,    Y)
 		if (row[0][0] == "#" and len(row)>2 and "YYYYMMDD" in row[1] and not start):
 			try:
 				fieldpos['STN'] = 0
 				fieldpos['YYYYMMDD'] = row.index("YYYYMMDD")
-				fieldpos['HH'] = row.index("HH")
+				fieldpos['H'] = row.index("H")
 				fieldpos['DD'] = row.index("DD")
 				fieldpos['FF'] = row.index("FF")
 				fieldpos['FX'] = row.index("FX")
@@ -311,7 +311,7 @@ def convert_knmi(knmidata, query):
 				fieldpos['RH'] = row.index("RH")
 				fieldpos['P'] = row.index("P")
 			except ValueError as e:
-				my_logger.exception("KNMI data file incompatible, could not find fields HH, DD or others")
+				my_logger.exception("KNMI data file incompatible, could not find fields HH, DD or others: {}".format(row))
 				quit("KNMI data file incompatible, could not find fields HH, DD or others: {}".format(e))
 			start = True
 
@@ -339,7 +339,7 @@ def convert_knmi(knmidata, query):
 			# timedelta to allow for wrapping over days (e.g. 1->1, 2->2, 
 			# but 24->0 next day)
 			# N.B. timestamp() only works in python3
-			fieldval['DATETIME'] = int((fieldval['YYYYMMDD'] + datetime.timedelta(hours=fieldval['HH'])).timestamp())
+			fieldval['DATETIME'] = int((fieldval['YYYYMMDD'] + datetime.timedelta(hours=fieldval['H'])).timestamp())
 
 			# Unpack dict to format query to give influxdb line protocol "value=X"
 			# See https://github.com/influxdata/docs.influxdata.com/issues/717#issuecomment-249618099
@@ -397,8 +397,8 @@ def get_secrets(secretsfile):
 			INFLUX_USER = data['knmi2influxdb']['influx_username']
 			INFLUX_PASSWD = data['knmi2influxdb']['influx_password']
 
-	except yaml.YAMLError as exc:
-		my_logger.exception('Could not load yaml file: {}'.format(exc))
+		except yaml.YAMLError as exc:
+			my_logger.exception('Could not load yaml file: {}'.format(exc))
 
 	return KNMIAPIKEY, INFLUX_USER, INFLUX_PASSWD
 
