@@ -144,10 +144,6 @@ def get_knmi_data_actual(api_key, knmistation=KNMISTATION, query=DEFAULTQUERY):
 	# Specific time: https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/2020/01/08/KMDS__OPER_P___10M_OBS_L2_1620.nc
 	# https://stackoverflow.com/questions/22676/how-do-i-download-a-file-over-http-using-python/22776#22776
 
-	# utcnow = datetime.datetime.utcnow()
-	# URI = "https://data.knmi.nl/download/Actuele10mindataKNMIstations/1/noversion/{year}/{month:02}/{day:02}/KMDS__OPER_P___10M_OBS_L2.nc".format(year=utcnow.year, month=utcnow.month, day=utcnow.day)
-	# urllib.request.urlretrieve(URI, "/tmp/KMDS__OPER_P___10M_OBS_L2.nc")
-
 	# New approach 20200800: https://developer.dataplatform.knmi.nl/portal/example-scripts#list-10-files
 	# Get latest file with data
 	api_url = "https://api.dataplatform.knmi.nl/open-data"
@@ -277,7 +273,7 @@ def convert_knmi(knmidata, query):
 	fieldval = {'NEWLINE':"\n"}
 	fieldfunc = {
 		'YYYYMMDD': lambda x: datetime.datetime(int(x[0:4]), int(x[4:6]), int(x[6:8]), tzinfo=datetime.timezone.utc), ## time
-		'H':  lambda x: int(x),
+		'HH':  lambda x: int(x),
 		'DD': lambda x: int(x),
 		'FF': lambda x: int(x)/10,
 		'FX': lambda x: int(x)/10,
@@ -292,7 +288,6 @@ def convert_knmi(knmidata, query):
 	fmt=PartialFormatter()
 
 	for r in knmidata:
-		print(r)
 		row = r.replace(' ','').split(',')
 		
 		# Find start row (syntax should be like # STN,YYYYMMDD,   HH,   DD,   FH,   FF,   FX,    T,  T10,   TD,   SQ,    Q,   DR,   RH,    P,   VV,    N,    U,   WW,   IX,    M,    R,    S,    O,    Y)
@@ -300,7 +295,7 @@ def convert_knmi(knmidata, query):
 			try:
 				fieldpos['STN'] = 0
 				fieldpos['YYYYMMDD'] = row.index("YYYYMMDD")
-				fieldpos['H'] = row.index("H")
+				fieldpos['HH'] = row.index("HH")
 				fieldpos['DD'] = row.index("DD")
 				fieldpos['FF'] = row.index("FF")
 				fieldpos['FX'] = row.index("FX")
@@ -314,6 +309,7 @@ def convert_knmi(knmidata, query):
 				my_logger.exception("KNMI data file incompatible, could not find fields HH, DD or others: {}".format(row))
 				quit("KNMI data file incompatible, could not find fields HH, DD or others: {}".format(e))
 			start = True
+			my_logger.debug("Started on row: {}".format(r))
 
 		# After we found the start marker, parse data.
 		elif (start and len(row) > 1):
@@ -339,7 +335,7 @@ def convert_knmi(knmidata, query):
 			# timedelta to allow for wrapping over days (e.g. 1->1, 2->2, 
 			# but 24->0 next day)
 			# N.B. timestamp() only works in python3
-			fieldval['DATETIME'] = int((fieldval['YYYYMMDD'] + datetime.timedelta(hours=fieldval['H'])).timestamp())
+			fieldval['DATETIME'] = int((fieldval['YYYYMMDD'] + datetime.timedelta(hours=fieldval['HH'])).timestamp())
 
 			# Unpack dict to format query to give influxdb line protocol "value=X"
 			# See https://github.com/influxdata/docs.influxdata.com/issues/717#issuecomment-249618099
