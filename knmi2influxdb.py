@@ -150,7 +150,7 @@ def get_knmi_data_actual(api_key, knmistation=KNMISTATION, query=DEFAULTQUERY):
 	dataset_name = "Actuele10mindataKNMIstations"
 	dataset_version = "2"
 
-	# Get 10 files since one hour ago, which should show the latest 6 files. We take the last file of this, which should be the newest. Guaranteed to work if files are available max 1 hour later
+	# Get the latest files since one hour ago, which should show 6 files (1 file per 10min). We take the last file of this, which should be the newest. Guaranteed to work if files are available max 1 hour later
 	timestamp_now = datetime.datetime.utcnow()
 	timestamp_one_hour_ago = timestamp_now - datetime.timedelta(hours=1)
 	filename_one_hour_ago = f"KMDS__OPER_P___10M_OBS_L2_{timestamp_one_hour_ago.strftime('%Y%m%d%H%M')}.nc"
@@ -261,6 +261,7 @@ def get_knmi_data_actual(api_key, knmistation=KNMISTATION, query=DEFAULTQUERY):
 
 	fmt = PartialFormatter()
 	outline = fmt.format(query, **fieldval)
+	print(outline)
 
 	# Return as array so we're compatible with convert_knmi() format (which 
 	# returns multiple lines)
